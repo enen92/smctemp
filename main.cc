@@ -1,5 +1,8 @@
+#include <charconv>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <thread>
 
 #include "smctemp.h"
 
@@ -7,7 +10,7 @@ void usage(char* prog) {
   std::cout << "Check Temperature by using Apple System Management Control (Smc) tool " << smctemp::kVersion << std::endl;
   std::cout << "Usage:" << std::endl;
   std::cout << prog << " [options]" << std::endl;
-  std::cout << "    -c         : list CPU temperatures (Celsius)" << std::endl;
+  std::cout << "    -c         : list CPU temperatures (Celsius). You can provide an argument to retry for n times (e.g. -c3 for 3 retries)." << std::endl;
   std::cout << "    -h         : help" << std::endl;
   std::cout << "    -l         : list all keys and values" << std::endl;
   std::cout << "    -v         : version" << std::endl;
@@ -15,17 +18,24 @@ void usage(char* prog) {
 
 int main(int argc, char *argv[]) {
   int c;
-  extern char   *optarg;
+  unsigned int attempts = 1;
 
   kern_return_t result;
   int           op = smctemp::kOpNone;
   smctemp::UInt32Char_t  key = { 0 };
   smctemp::SmcVal_t      val;
 
-  while ((c = getopt(argc, argv, "clvh")) != -1) {
+  while ((c = getopt(argc, argv, "c::lvh")) != -1) {
     switch(c) {
       case 'c':
         op = smctemp::kOpReadCpuTemp;
+        if (optarg) {
+          auto [ptr, ec] = std::from_chars(optarg, optarg + strlen(optarg), attempts);
+          if (ec != std::errc()) {
+            std::cerr << "Invalid argument provided for -c (integer is required)" << std::endl;
+            return 1;
+          }
+        }
         break;
       case 'l':
         op = smctemp::kOpList;
@@ -60,7 +70,16 @@ int main(int argc, char *argv[]) {
       }
       break;
     case smctemp::kOpReadCpuTemp:
-      std::cout << std::fixed << std::setprecision(1) << smc_temp.GetCpuTemp();
+      double temp = 0.0;
+      while (attempts > 0)
+      {
+        temp = smc_temp.GetCpuTemp();
+        attempts--;
+        if (attempts > 0 && temp == 0.0) {
+          std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+      }
+      std::cout << std::fixed << std::setprecision(1) << temp;
       break;
   }
 
