@@ -485,5 +485,30 @@ double SmcTemp::GetCpuTemp() {
   return temp;
 }
 
+double SmcTemp::GetGpuTemp() {
+  double temp = 0.0;
+#if defined(ARCH_TYPE_X86_64)
+  temp = smc_accessor_.ReadValue(kSensorTg0d);
+#elif defined(ARCH_TYPE_ARM64)
+  std::vector<std::string> sensors;
+  const std::pair<unsigned int, unsigned int> valid_temperature_limits{10, 120};
+  const std::string cpumodel = getCPUModel();
+  if (cpumodel.find("m2") != std::string::npos ) { // Apple M2
+    sensors.emplace_back(static_cast<std::string>(kSensorTg0f));
+    sensors.emplace_back(static_cast<std::string>(kSensorTg0j));
+  } else if (cpumodel.find("m1") != std::string::npos) { // Apple M1
+    sensors.emplace_back(static_cast<std::string>(kSensorTg05));
+    sensors.emplace_back(static_cast<std::string>(kSensorTg0D));
+    sensors.emplace_back(static_cast<std::string>(kSensorTg0L));
+    sensors.emplace_back(static_cast<std::string>(kSensorTg0T));
+  } else {
+    // not supported
+    return temp;
+  }
+  temp = CalculateAverageTemperature(sensors, valid_temperature_limits);
+#endif
+  return temp;
+}
+
 }
 
